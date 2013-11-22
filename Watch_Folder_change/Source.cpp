@@ -9,11 +9,73 @@
 #include <fstream>
 #include <sstream>
 
+#import <msxml6.dll> rename_namespace(_T("MSXML"))
+
 #pragma comment(lib, "User32.lib")
 
 using namespace std;
 
 void DisplayErrorBox(LPTSTR lpszFunction);
+
+
+int ScanXML(string LatestFolderName)
+{
+	HRESULT hr = CoInitialize(NULL); 
+	cout <<"Input Varibale: "+LatestFolderName <<endl;
+	if (SUCCEEDED(hr))
+	{
+		try
+		{
+			MSXML::IXMLDOMDocument2Ptr xmlDoc;
+			hr = xmlDoc.CreateInstance(__uuidof(MSXML::DOMDocument60), NULL, CLSCTX_INPROC_SERVER);
+			// TODO: if (FAILED(hr))...
+
+			// Convert 'string LatestFolderName' to something that xmlDoc->load() is able to read.
+			// I know that 'ffd.cFileName' where I start with this is already something like wchar_t
+			// But it works now, and I don't know yet how to combine two wchar_t like I need below etc.
+			// Who ever reads this. Forgive me :))
+			string tempLatestFolderName = LatestFolderName+"\\Result.xml";
+		        wstring widestr = wstring(tempLatestFolderName.begin(), tempLatestFolderName.end());
+			const wchar_t * widecstr = widestr.c_str();
+			if (xmlDoc->load(widecstr) != VARIANT_TRUE)
+			{
+				printf("Unable to load Result.xml\n");
+			}
+			else
+			{
+				printf("XML was successfully loaded\n");
+
+				xmlDoc->setProperty("SelectionLanguage", "XPath");
+
+				MSXML::IXMLDOMNodeListPtr PeakAreaPercent = xmlDoc->getElementsByTagName("AreaPercent"); //Pointer to List of Elements with specified name
+				int NumberOfPeaks = PeakAreaPercent->length; //Number of Peaks should be the number of AreaPercent entrys in XML File.
+				cout <<"NumberOfPeaks=" << NumberOfPeaks <<endl;
+
+				float * AreaPercentValue =new float[NumberOfPeaks];
+
+				MSXML::IXMLDOMElementPtr spElementTemp; //need this to access values in elements
+				for (int i = 0; i < PeakAreaPercent->length; i++) 
+				{
+					spElementTemp = (MSXML::IXMLDOMElementPtr) PeakAreaPercent->item[i];
+					// Get the text node with the element content. If present it will be the first child.
+					MSXML::IXMLDOMTextPtr spText = spElementTemp->firstChild;
+					AreaPercentValue[i]=float(spText->nodeValue);
+					if (spText != NULL) 
+					{
+						cout << " Element content: " << _bstr_t(spText->nodeValue) << endl;
+					}
+				}
+			}
+		}
+		catch (_com_error &e)
+		{
+			printf("ERROR: %ws\n", e.ErrorMessage());
+		}
+		CoUninitialize();
+	}
+	return 0;
+}
+
 
 int _tmain(int argc, TCHAR *argv[])
 {
@@ -72,6 +134,7 @@ int _tmain(int argc, TCHAR *argv[])
 	char ch[260];
 	char DefChar = ' ';
 	string LatestFolderName;
+	//wchar_t * LatestFolderNameWCHAR;  //tried to use wchar_t directly without converting to sring. Haven't got it to work yet.
 	while(1)
 	{
 		do
@@ -93,7 +156,9 @@ int _tmain(int argc, TCHAR *argv[])
 						cout << "First file time is later than second file time." <<endl;
 						WideCharToMultiByte(CP_ACP,0,ffd.cFileName,-1, ch,260,&DefChar, NULL);
 						LatestFolderName = string(ch);
-						cout << LatestFolderName <<endl;
+						cout <<"Latest Foldername is: " << LatestFolderName <<endl;
+						ScanXML(LatestFolderName);
+						//LatestFolderNameWCHAR = ffd.cFileName;
 					}
 				}
 				/*if (CompareFileTimeResult == 0)
