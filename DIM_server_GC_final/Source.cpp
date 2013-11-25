@@ -51,7 +51,6 @@ int GetStreamNumber(string LatestFolderName)
 				MSXML::IXMLDOMElementPtr spElementTemp = (MSXML::IXMLDOMElementPtr) SampleName->item[0];
 				MSXML::IXMLDOMTextPtr spText = spElementTemp->firstChild;
 				int StreamNumber = int(spText->nodeValue);
-				CoUninitialize();
 				return StreamNumber;
 				//_bstr_t RealStreamNames = "Stream 0";
 				//int compareresult = wcscmp(_bstr_t(spText->nodeValue),RealStreamNames); //returns int 0 if both strings are equal.
@@ -88,7 +87,6 @@ int GetNumberOfPeaks(string LatestFolderName)
 				xmlDoc->setProperty("SelectionLanguage", "XPath");
 				MSXML::IXMLDOMNodeListPtr PeakAreaPercent = xmlDoc->getElementsByTagName("AreaPercent"); //Pointer to List of Elements with specified name
 				int NumberOfPeaks = PeakAreaPercent->length; //Number of Peaks should be equal to the number of AreaPercent entrys in XML File.
-				CoUninitialize();
 				return NumberOfPeaks;
 			}
 		}
@@ -148,7 +146,6 @@ float * GetPeakAreas(string LatestFolderName)
 					//cout << " Element content: " << _bstr_t(spText->nodeValue) << endl;
 					//}
 				}
-				CoUninitialize();
 				return AreaPercentValue;
 			}
 		}
