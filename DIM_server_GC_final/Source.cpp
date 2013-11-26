@@ -102,10 +102,11 @@ int GetNumberOfPeaks(string LatestFolderName)
 	}
 }
 
-float * GetPeakAreas(string LatestFolderName)
+COMPLEXDATA GetPeakAreas(string LatestFolderName)
 //return Peak Areas of Peaks in "Result.xml"
 {
-	HRESULT hr = CoInitialize(NULL); 
+	COMPLEXDATA Peaks;
+    	HRESULT hr = CoInitialize(NULL); 
 	if (SUCCEEDED(hr))
 	{
 		try
@@ -144,14 +145,13 @@ float * GetPeakAreas(string LatestFolderName)
 					// Get the text node with the element content. If present it will be the first child.
 					MSXML::IXMLDOMTextPtr spText = spElementTemp->firstChild;
 					AreaPercentValue[i]=(float)wcstod(_bstr_t(spText->nodeValue),NULL); //using directly _variant_t Extractor 'operator float()' will produce strange numbers. wcstof() is undefined according to compiler.
-					
-					cout << "area pecent of peak is: " << AreaPercentValue[i] <<endl;
+					Peaks.farr[i] = AreaPercentValue[i];
 					//if (spText != NULL) 
 					//{
 					//cout << " Element TESTEST content: " << wcstod(_bstr_t(spText->nodeValue),NULL) << endl;
 					//}
 				}
-				return AreaPercentValue;
+				return Peaks;
 			}
 		}
 		catch (_com_error &e)
@@ -160,7 +160,8 @@ float * GetPeakAreas(string LatestFolderName)
 		}
 		CoUninitialize();
 	}
-	return 0;
+	cout << "GetPeakAreas() ran until second return" <<endl;
+	return Peaks;
 }
 
 
@@ -259,12 +260,12 @@ int WatchFolderChange(int argc, TCHAR *argv[])
 						StreamNumber = GetStreamNumber(LatestFolderName);				
 						cout <<"Number of Peaks returned by GetNumberOfPeaks() = "<< NumberOfPeaks<<endl;
 						cout <<"StreamNumber returned by GetStreamNumber() = "<< StreamNumber<<endl;
-						PeakAreasPointer = GetPeakAreas(LatestFolderName);
-						cout << "PeakAreasPointer * = " << PeakAreasPointer <<endl;
+						Peaks = GetPeakAreas(LatestFolderName);
+						//cout << "Peaks Pointer * = " << Peaks <<endl;
 						for (int i=0;i<NumberOfPeaks;i++)
 						{
-							Peaks.farr[i] = PeakAreasPointer[i];
-							cout <<"test : " <<Peaks.farr[i] << endl;
+	    						//Peaks.farr[i] = PeakAreasPointer[i];
+							cout <<"test : " << Peaks.farr[i] << endl;
 						}
 						Stream1.updateService(); 
 						StreamNumberService.updateService(); 
