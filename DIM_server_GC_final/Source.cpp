@@ -16,6 +16,10 @@
 
 using namespace std;
 
+typedef struct{
+	float farr[7];
+}COMPLEXDATA;
+
 void DisplayErrorBox(LPTSTR lpszFunction);
 
 int *returnarray(string LatestFolderName,int s){
@@ -159,7 +163,7 @@ float * GetPeakAreas(string LatestFolderName)
 }
 
 
-int _tmain(int argc, TCHAR *argv[])
+int WatchFolderChange(int argc, TCHAR *argv[])
 // Main function of this DIM Server.
 // Scans for new Subfolders in a Folder that needs to be specified at startup. (This is a modification of the code example found here: http://msdn.microsoft.com/en-us/library/aa365200(v=vs.85).aspx )
 // calls above functions (e.g. GetPeakAreas()) to obtain Informatoin from "Result.xml" found in every subfolder.
@@ -223,7 +227,12 @@ int _tmain(int argc, TCHAR *argv[])
 	
 	// DIM par starts here
 	// create DIM-Services
-	//DimService Stream1("DELPHI/RUN_NUMBER",run); 
+	float * PeakAreasPointer = new float[];
+	//DimService Stream1("Stream1_PeakAreas",*PeakAreasPointer); 
+	COMPLEXDATA Peaks;
+	DimService Stream1("Stream1_PeakAreas","F:7",(void *)&Peaks, sizeof(Peaks));
+	DimService StreamNumberService("StreamNumber",StreamNumber); 
+	DimServer::start("Gaschromatograph");
 	while(1)
 	{
 		do
@@ -249,11 +258,15 @@ int _tmain(int argc, TCHAR *argv[])
 						StreamNumber = GetStreamNumber(LatestFolderName);				
 						cout <<"Number of Peaks returned by GetNumberOfPeaks() = "<< NumberOfPeaks<<endl;
 						cout <<"StreamNumber returned by GetStreamNumber() = "<< StreamNumber<<endl;
-						float * PeakAreasPointer = GetPeakAreas(LatestFolderName);
+						PeakAreasPointer = GetPeakAreas(LatestFolderName);
+						cout << "PeakAreasPointer * = " << PeakAreasPointer <<endl;
 						for (int i=0;i<NumberOfPeaks;i++)
 						{
-							cout <<"test : " <<PeakAreasPointer[i] << endl;
+							Peaks.farr[i] = PeakAreasPointer[i];
+							cout <<"test : " <<Peaks.farr[i] << endl;
 						}
+						Stream1.updateService(); 
+						StreamNumberService.updateService(); 
 						//LatestFolderNameWCHAR = ffd.cFileName;
 					}
 				}
@@ -308,3 +321,8 @@ void DisplayErrorBox(LPTSTR lpszFunction)
 	LocalFree(lpDisplayBuf);
 }
 
+
+int _tmain(int argc, TCHAR *argv[])
+{
+    WatchFolderChange(argc,argv);
+}
