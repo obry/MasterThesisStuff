@@ -143,11 +143,12 @@ float * GetPeakAreas(string LatestFolderName)
 					spElementTemp = (MSXML::IXMLDOMElementPtr) PeakAreaPercent->item[i];
 					// Get the text node with the element content. If present it will be the first child.
 					MSXML::IXMLDOMTextPtr spText = spElementTemp->firstChild;
-					AreaPercentValue[i]=float(spText->nodeValue);
+					AreaPercentValue[i]=(float)wcstod(_bstr_t(spText->nodeValue),NULL); //using directly _variant_t Extractor 'operator float()' will produce strange numbers. wcstof() is undefined according to compiler.
+					
 					cout << "area pecent of peak is: " << AreaPercentValue[i] <<endl;
 					//if (spText != NULL) 
 					//{
-					//cout << " Element content: " << _bstr_t(spText->nodeValue) << endl;
+					//cout << " Element TESTEST content: " << wcstod(_bstr_t(spText->nodeValue),NULL) << endl;
 					//}
 				}
 				return AreaPercentValue;
