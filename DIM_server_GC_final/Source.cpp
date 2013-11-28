@@ -12,26 +12,26 @@
 
 #import <msxml6.dll> rename_namespace(_T("MSXML"))
 
-#pragma comment(lib, "User32.lib")
+#pragma comment(lib, "User32.lib") // _bstr_t is in here.
 
 using namespace std;
 
 typedef struct{
-	float farr[7];
+	float farr[12]; // this is more than needed, but right Number of Peaks is returned by GetNumberOfPeaks()
+	// Open question: How to deal with this in PVSS? There must be better ideas.
 }COMPLEXDATA;
 
 void DisplayErrorBox(LPTSTR lpszFunction);
 
-int *returnarray(string LatestFolderName,int s){
-	int *ret=new int[s];
-	for (int a=0;a<s;a++)
-		ret[a]=a;
-	return ret;
+string from_variant(VARIANT& vt)
+	//conversion from _bstr_t to std::string
+{
+	_bstr_t bs(vt);
+	return std::string(static_cast<const char*>(bs));
 }
-
 int GetStreamNumber(string LatestFolderName)
-// returns the Name of the Stream (Stream 1, 2, 3 ... 10) that was used by the Gaschromatograph's Stream-Selector,
-// by reading "SampleName" from "Result.xml"
+	// returns the Name of the Stream (Stream 1, 2, 3 ... 10) that was used by the Gaschromatograph's Stream-Selector,
+	// by reading "SampleName" from "Result.xml"
 {
 	HRESULT hr = CoInitialize(NULL); 
 	if (SUCCEEDED(hr))
@@ -54,11 +54,13 @@ int GetStreamNumber(string LatestFolderName)
 				MSXML::IXMLDOMNodeListPtr SampleName = xmlDoc->getElementsByTagName("SampleName"); //Pointer to List of Elements with specified name
 				MSXML::IXMLDOMElementPtr spElementTemp = (MSXML::IXMLDOMElementPtr) SampleName->item[0];
 				MSXML::IXMLDOMTextPtr spText = spElementTemp->firstChild;
-				int StreamNumber = int(spText->nodeValue);
+				// spText->nodeValu is e.g. "Stream 1". Extract the integer Number of the Stream:
+				string StreamName = from_variant(spText->nodeValue);
+				int StreamNumber = 0;
+				string firstString= "";
+				stringstream ss(StreamName);
+				ss  >> firstString >> StreamNumber;
 				return StreamNumber;
-				//_bstr_t RealStreamNames = "Stream 0";
-				//int compareresult = wcscmp(_bstr_t(spText->nodeValue),RealStreamNames); //returns int 0 if both strings are equal.
-				//cout << "compareresult = " << compareresult << endl;
 			}
 		}
 		catch (_com_error &e)
@@ -67,10 +69,10 @@ int GetStreamNumber(string LatestFolderName)
 		}
 		CoUninitialize();
 	}
-	return 121212;
+	return -1;
 }
 int GetNumberOfPeaks(string LatestFolderName)
-// returns the Number of Peaks that was found in "Result.xml"
+	// returns the Number of Peaks that was found in "Result.xml"
 {
 	HRESULT hr = CoInitialize(NULL); 
 	if (SUCCEEDED(hr))
@@ -100,13 +102,14 @@ int GetNumberOfPeaks(string LatestFolderName)
 		}
 		CoUninitialize();
 	}
+	return -1;
 }
 
-COMPLEXDATA GetPeakAreas(string LatestFolderName)
-//return Peak Areas of Peaks in "Result.xml"
+COMPLEXDATA GetPeakData(string LatestFolderName, _bstr_t ElementName)
+	//return Peak Areas of Peaks in "Result.xml"
 {
 	COMPLEXDATA Peaks;
-    	HRESULT hr = CoInitialize(NULL); 
+	HRESULT hr = CoInitialize(NULL); 
 	if (SUCCEEDED(hr))
 	{
 		try
@@ -132,7 +135,7 @@ COMPLEXDATA GetPeakAreas(string LatestFolderName)
 
 				xmlDoc->setProperty("SelectionLanguage", "XPath");
 
-				MSXML::IXMLDOMNodeListPtr PeakAreaPercent = xmlDoc->getElementsByTagName("AreaPercent"); //Pointer to List of Elements with specified name
+				MSXML::IXMLDOMNodeListPtr PeakAreaPercent = xmlDoc->getElementsByTagName(ElementName); //Pointer to List of Elements with specified name
 				int NumberOfPeaks = PeakAreaPercent->length; //Number of Peaks should be equal to the number of AreaPercent entrys in XML File.
 				cout <<"NumberOfPeaks=" << NumberOfPeaks <<endl;
 
@@ -160,15 +163,15 @@ COMPLEXDATA GetPeakAreas(string LatestFolderName)
 		}
 		CoUninitialize();
 	}
-	cout << "GetPeakAreas() ran until second return" <<endl;
+	cout << "GetPeakData() ran until second return" <<endl;
 	return Peaks;
 }
 
 
-int WatchFolderChange(int argc, TCHAR *argv[])
-// Main function of this DIM Server.
-// Scans for new Subfolders in a Folder that needs to be specified at startup. (This is a modification of the code example found here: http://msdn.microsoft.com/en-us/library/aa365200(v=vs.85).aspx )
-// calls above functions (e.g. GetPeakAreas()) to obtain Informatoin from "Result.xml" found in every subfolder.
+int _tmain(int argc, TCHAR *argv[])
+	// Main function of this DIM Server.
+	// Scans for new Subfolders in a Folder that needs to be specified at startup. (This is a modification of the code example found here: http://msdn.microsoft.com/en-us/library/aa365200(v=vs.85).aspx )
+	// calls above functions (e.g. GetPeakData()) to obtain Informatoin from "Result.xml" found in every subfolder.
 {
 	WIN32_FIND_DATA ffd;
 	LARGE_INTEGER filesize;
@@ -226,7 +229,7 @@ int WatchFolderChange(int argc, TCHAR *argv[])
 	int NumberOfPeaks;
 	int StreamNumber;
 	//wchar_t * LatestFolderNameWCHAR;  //tried to use wchar_t directly without converting to sring. Haven't got it to work yet.
-	
+
 	// DIM par starts here
 	// create DIM-Services
 	float * PeakAreasPointer = new float[];
@@ -260,12 +263,13 @@ int WatchFolderChange(int argc, TCHAR *argv[])
 						StreamNumber = GetStreamNumber(LatestFolderName);				
 						cout <<"Number of Peaks returned by GetNumberOfPeaks() = "<< NumberOfPeaks<<endl;
 						cout <<"StreamNumber returned by GetStreamNumber() = "<< StreamNumber<<endl;
-						Peaks = GetPeakAreas(LatestFolderName);
+						_bstr_t ElementName = "RetTime";
+						Peaks = GetPeakData(LatestFolderName, ElementName);
 						//cout << "Peaks Pointer * = " << Peaks <<endl;
 						for (int i=0;i<NumberOfPeaks;i++)
 						{
-	    						//Peaks.farr[i] = PeakAreasPointer[i];
-							cout <<"test : " << Peaks.farr[i] << endl;
+							//Peaks.farr[i] = PeakAreasPointer[i];
+							cout << ElementName <<" as COMPLEXDATA is : " << Peaks.farr[i] << endl;
 						}
 						Stream1.updateService(); 
 						StreamNumberService.updateService(); 
@@ -275,9 +279,11 @@ int WatchFolderChange(int argc, TCHAR *argv[])
 			}
 		}
 		while (FindNextFile(hFind, &ffd) != 0);
+		// <- end of do... while ....
+
 		firstCycle=FALSE;
 		cout << "end of run" <<endl;
-		Sleep(5000);
+		Sleep(4000);
 		hFind = FindFirstFile(szDir, &ffd);
 	}
 	dwError = GetLastError();
@@ -321,10 +327,4 @@ void DisplayErrorBox(LPTSTR lpszFunction)
 
 	LocalFree(lpMsgBuf);
 	LocalFree(lpDisplayBuf);
-}
-
-
-int _tmain(int argc, TCHAR *argv[])
-{
-    WatchFolderChange(argc,argv);
 }
