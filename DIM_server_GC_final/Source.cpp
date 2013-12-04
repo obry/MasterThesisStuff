@@ -106,7 +106,7 @@ int GetNumberOfPeaks(string LatestFolderName)
 }
 
 COMPLEXDATA GetPeakData(string LatestFolderName, _bstr_t ElementName)
-	//return Peak Areas of Peaks in "Result.xml"
+	//return Info with label ElementName in "Result.xml" for all Peaks
 {
 	COMPLEXDATA Peaks;
 	HRESULT hr = CoInitialize(NULL); 
@@ -231,12 +231,31 @@ int _tmain(int argc, TCHAR *argv[])
 	//wchar_t * LatestFolderNameWCHAR;  //tried to use wchar_t directly without converting to sring. Haven't got it to work yet.
 
 	// DIM par starts here
+	// create variables for DIM Services for TPC:
+	float CO2_TPC=0;
+	float Argon_TPC=0;
+	float N2_TPC=0;
+	float Water_TPC=0;
+	// create Retention Time values:
+	float RTCO2_min = 2.9f; //the "f" is to explicitly tell the compiler this is a float. I get "truncation from 'double' to 'float'" warning otherwise !?
+	float RTCO2_max = 3.4f;
+	float RTArgon_min = 5.9f;
+	float RTArgon_max = 6.3f;
+	// various stuff like Elementnames to call or temp variables:
+	int activePeak = 0;
+	_bstr_t RT = "RetTime";
+	_bstr_t PeakArea = "AreaPercent";
 	// create DIM-Services
 	float * PeakAreasPointer = new float[];
 	//DimService Stream1("Stream1_PeakAreas",*PeakAreasPointer); 
-	COMPLEXDATA Peaks;
-	DimService Stream1("Stream1_PeakAreas","F:7",(void *)&Peaks, sizeof(Peaks));
+	COMPLEXDATA PeakAreaData;
+	COMPLEXDATA RTData;
+	DimService Stream1("Stream1_PeakAreas","F:7",(void *)&PeakAreaData, sizeof(PeakAreaData));
 	DimService StreamNumberService("StreamNumber",StreamNumber); 
+	DimService tpcCO2Content("tpcCO2Content",CO2_TPC); 
+	DimService tpcArgonContent("tpcArgonContent",Argon_TPC); 
+	DimService tpcN2Content("tpcN2Content",N2_TPC); 
+	DimService tpcWaterContent("tpcWaterContent",Water_TPC); 
 	DimServer::start("Gaschromatograph");
 	while(1)
 	{
@@ -248,7 +267,6 @@ int _tmain(int argc, TCHAR *argv[])
 				if (firstRun) 
 				{ 
 					time2 = time1;
-					cout << "first run"<<endl;
 					firstRun = FALSE;
 				}
 				CompareFileTimeResult = CompareFileTime(&time1,&time2); //returns 1, 0 or -1 
@@ -263,13 +281,15 @@ int _tmain(int argc, TCHAR *argv[])
 						StreamNumber = GetStreamNumber(LatestFolderName);				
 						cout <<"Number of Peaks returned by GetNumberOfPeaks() = "<< NumberOfPeaks<<endl;
 						cout <<"StreamNumber returned by GetStreamNumber() = "<< StreamNumber<<endl;
-						_bstr_t ElementName = "RetTime";
-						Peaks = GetPeakData(LatestFolderName, ElementName);
-						//cout << "Peaks Pointer * = " << Peaks <<endl;
+						PeakAreaData = GetPeakData(LatestFolderName, PeakArea);
+						RTData = GetPeakData(LatestFolderName, RT);
+						// decide based on Retention Time which peak is which and update DIM services accordingly:
 						for (int i=0;i<NumberOfPeaks;i++)
 						{
-							//Peaks.farr[i] = PeakAreasPointer[i];
-							cout << ElementName <<" as COMPLEXDATA is : " << Peaks.farr[i] << endl;
+							if ( RTCO2_min<RTData.farr[i] && RTData.farr[i]<RTCO2_max ) CO2_TPC = PeakAreaData.farr[i], cout << "CO2 candidate: " << CO2_TPC <<endl , tpcCO2Content.updateService();
+							if ( RTArgon_min<RTData.farr[i] && RTData.farr[i]<RTArgon_max ) Argon_TPC = PeakAreaData.farr[i], cout << "Argon candidate: " << Argon_TPC <<endl , tpcArgonContent.updateService();
+							//cout << PeakArea <<" as COMPLEXDATA is : " << PeakAreaData.farr[i] << endl;
+							//cout << RT <<" as COMPLEXDATA is : " << RTData.farr[i] << endl;
 						}
 						Stream1.updateService(); 
 						StreamNumberService.updateService(); 
@@ -282,7 +302,6 @@ int _tmain(int argc, TCHAR *argv[])
 		// <- end of do... while ....
 
 		firstCycle=FALSE;
-		cout << "end of run" <<endl;
 		Sleep(4000);
 		hFind = FindFirstFile(szDir, &ffd);
 	}
