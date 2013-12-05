@@ -19,6 +19,7 @@ using namespace std;
 typedef struct{
 	float farr[12]; // this is more than needed, but right Number of Peaks is returned by GetNumberOfPeaks()
 	// Open question: How to deal with this in PVSS? There must be better ideas.
+	// ==> TPC prefers single service for each datapointelement anyway.
 }COMPLEXDATA;
 
 void DisplayErrorBox(LPTSTR lpszFunction);
@@ -106,7 +107,7 @@ int GetNumberOfPeaks(string LatestFolderName)
 }
 
 COMPLEXDATA GetPeakData(string LatestFolderName, _bstr_t ElementName)
-	//return Info with label ElementName in "Result.xml" for all Peaks
+	//return Info with label 'ElementName' in "Result.xml" for all Peaks
 {
 	COMPLEXDATA Peaks;
 	HRESULT hr = CoInitialize(NULL); 
@@ -127,7 +128,7 @@ COMPLEXDATA GetPeakData(string LatestFolderName, _bstr_t ElementName)
 			const wchar_t * widecstr = widestr.c_str();
 			if (xmlDoc->load(widecstr) != VARIANT_TRUE)
 			{
-				printf("Unable to load Result.xml\n");
+				printf("Unable to load Result.xml in GetPeakData()\n");
 			}
 			else
 			{
@@ -170,8 +171,8 @@ COMPLEXDATA GetPeakData(string LatestFolderName, _bstr_t ElementName)
 
 int _tmain(int argc, TCHAR *argv[])
 	// Main function of this DIM Server.
-	// Scans for new Subfolders in a Folder that needs to be specified at startup. (This is a modification of the code example found here: http://msdn.microsoft.com/en-us/library/aa365200(v=vs.85).aspx )
-	// calls above functions (e.g. GetPeakData()) to obtain Informatoin from "Result.xml" found in every subfolder.
+	// Scans for new Subfolders in a Folder that needs to be specified at startup and calls above functions (e.g. GetPeakData()) to obtain Informatoin from "Result.xml" found in every subfolder.
+	// (This is a modification of the code example found here: http://msdn.microsoft.com/en-us/library/aa365200(v=vs.85).aspx )	
 {
 	WIN32_FIND_DATA ffd;
 	LARGE_INTEGER filesize;
@@ -184,7 +185,6 @@ int _tmain(int argc, TCHAR *argv[])
 
 	// If the directory is not specified as a command-line argument,
 	// print usage.
-
 	if(argc != 2)
 	{
 		_tprintf(TEXT("\nUsage: %s <directory name>\n"), argv[0]);
@@ -193,7 +193,6 @@ int _tmain(int argc, TCHAR *argv[])
 
 	// Check that the input path plus 3 is not longer than MAX_PATH.
 	// Three characters are for the "\*" plus NULL appended below.
-
 	StringCchLength(argv[1], MAX_PATH, &length_of_arg);
 
 	if (length_of_arg > (MAX_PATH - 3))
@@ -218,25 +217,24 @@ int _tmain(int argc, TCHAR *argv[])
 		return dwError;
 	} 
 
-	// List all the files in the directory with some info about them.
+	// Declare / initialize variables that I use to find the latest subfolders in the monitored folder.
 	int CompareFileTimeResult;
 	bool firstRun=TRUE;
 	bool firstCycle=TRUE;
-	//definitoins used in conversion from wide char output of e.g. 'ffd.cFileName' to narrow char array
+	// Declare / initialize used in conversion from wide char output of e.g. 'ffd.cFileName' to narrow char array
 	char ch[260];
 	char DefChar = ' ';
 	string LatestFolderName;
-	// Handle the Path to create full Path 'targetDirectory+"\\"+LatestFolderName'
+	// Convert userinput of Target Directory ( argv[1] ) to string in order to create full Path 'targetDirectory+"\\"+LatestFolderName' in the end.
 	string targetDirectory;
 	WideCharToMultiByte(CP_ACP,0,argv[1],-1, ch,260,&DefChar, NULL);
 	targetDirectory = string(ch);
 	//initialize some return values
 	int NumberOfPeaks;
 	int StreamNumber;
-	//wchar_t * LatestFolderNameWCHAR;  //tried to use wchar_t directly without converting to sring. Haven't got it to work yet.
 
 	// DIM par starts here
-	// create variables for DIM Services for TPC:
+	// create variables for DIM Services of TPC:
 	float CO2_TPC=0;
 	float Argon_TPC=0;
 	float N2_TPC=0;
@@ -246,22 +244,29 @@ int _tmain(int argc, TCHAR *argv[])
 	float RTCO2_max = 3.4f;
 	float RTArgon_min = 5.9f;
 	float RTArgon_max = 6.3f;
-	// various stuff like Elementnames to call or temp variables:
+	// various stuff like Elementnames that will be called or temp variables:
 	int activePeak = 0;
 	_bstr_t RT = "RetTime";
 	_bstr_t PeakArea = "AreaPercent";
 	// create DIM-Services
 	float * PeakAreasPointer = new float[];
-	//DimService Stream1("Stream1_PeakAreas",*PeakAreasPointer); 
 	COMPLEXDATA PeakAreaData;
 	COMPLEXDATA RTData;
 	DimService Stream1("Stream1_PeakAreas","F:7",(void *)&PeakAreaData, sizeof(PeakAreaData));
-	DimService StreamNumberService("StreamNumber",StreamNumber); 
 	DimService tpcCO2Content("tpcCO2Content",CO2_TPC); 
 	DimService tpcArgonContent("tpcArgonContent",Argon_TPC); 
 	DimService tpcN2Content("tpcN2Content",N2_TPC); 
-	DimService tpcWaterContent("tpcWaterContent",Water_TPC); 
+	DimService tpcWaterContent("tpcWaterContent",Water_TPC);
+	DimServer::setDnsNode("localhost"); //tpc dim dns node: 'alitpcdimdns'
+	DimServer::autoStartOff();//Instructs the server to wait for a new DimServer::start(name) in order to register newly declared services. Lets me use two DimServer::start() with independent DIM_DNS_NODE for TRD and TPC.
 	DimServer::start("TPC_GC");
+	
+	// TRD DIM server
+	DimServer::setDnsNode("localhost");
+	DimServer::start("TRD_GC");
+	DimServer::autoStartOn();
+	DimService StreamNumberService("StreamNumber",StreamNumber);
+
 	while(1)
 	{
 		do
@@ -298,14 +303,12 @@ int _tmain(int argc, TCHAR *argv[])
 						}
 						Stream1.updateService(); 
 						StreamNumberService.updateService(); 
-						//LatestFolderNameWCHAR = ffd.cFileName;
 					}
 				}
 			}
 		}
 		while (FindNextFile(hFind, &ffd) != 0);
 		// <- end of do... while ....
-
 		firstCycle=FALSE;
 		Sleep(4000);
 		hFind = FindFirstFile(szDir, &ffd);
@@ -319,7 +322,6 @@ int _tmain(int argc, TCHAR *argv[])
 	FindClose(hFind);
 	return dwError;
 }
-
 
 void DisplayErrorBox(LPTSTR lpszFunction) 
 { 
