@@ -222,10 +222,15 @@ int _tmain(int argc, TCHAR *argv[])
 	int CompareFileTimeResult;
 	bool firstRun=TRUE;
 	bool firstCycle=TRUE;
-	//definitoins used in conversion from wide char output of 'ffd.cFileName' to narrow char array
+	//definitoins used in conversion from wide char output of e.g. 'ffd.cFileName' to narrow char array
 	char ch[260];
 	char DefChar = ' ';
 	string LatestFolderName;
+	// Handle the Path to create full Path 'targetDirectory+"\\"+LatestFolderName'
+	string targetDirectory;
+	WideCharToMultiByte(CP_ACP,0,argv[1],-1, ch,260,&DefChar, NULL);
+	targetDirectory = string(ch);
+	//initialize some return values
 	int NumberOfPeaks;
 	int StreamNumber;
 	//wchar_t * LatestFolderNameWCHAR;  //tried to use wchar_t directly without converting to sring. Haven't got it to work yet.
@@ -256,7 +261,7 @@ int _tmain(int argc, TCHAR *argv[])
 	DimService tpcArgonContent("tpcArgonContent",Argon_TPC); 
 	DimService tpcN2Content("tpcN2Content",N2_TPC); 
 	DimService tpcWaterContent("tpcWaterContent",Water_TPC); 
-	DimServer::start("Gaschromatograph");
+	DimServer::start("TPC_GC");
 	while(1)
 	{
 		do
@@ -276,7 +281,7 @@ int _tmain(int argc, TCHAR *argv[])
 					if (!firstCycle)
 					{
 						WideCharToMultiByte(CP_ACP,0,ffd.cFileName,-1, ch,260,&DefChar, NULL);
-						LatestFolderName = string(ch);
+						LatestFolderName = targetDirectory+"\\"+string(ch);
 						NumberOfPeaks = GetNumberOfPeaks(LatestFolderName);
 						StreamNumber = GetStreamNumber(LatestFolderName);				
 						cout <<"Number of Peaks returned by GetNumberOfPeaks() = "<< NumberOfPeaks<<endl;
