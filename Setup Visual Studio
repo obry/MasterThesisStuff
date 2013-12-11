@@ -23,4 +23,5 @@ edit
 "Additional Dependencies"
 and type there "dim.lib".
 
-/DIM_server_GC_final/Source.cpp should now compile successfully
+/DIM_server_GC_final/Source.cpp should now compile successfully.
+To execute the *.exe you need to have "dim.dll" from "dim_xxxx\bin32" in the same folder as the *.exe.
