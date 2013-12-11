@@ -1,0 +1,26 @@
+#What is needed to do before you can successfully compile /DIM_server_GC_final/Source.cpp
+
+download http://dim.web.cern.ch/dim/dim_v20r7.zip
+and extract somewhere.
+There will be a Folder "dim_vxxxx" with version number xxxx. (I used "dim_20r7").
+
+In Visual Studio create a new Project of "Application Type" "Console application".
+Check "Additional options" "Empty project".
+Create and open the Project.
+
+In Visual Studio open the Project's Propeties with eiterh Alt+F or the tab "Project/'projectname' Properties".
+From there you go to
+"/Configuration Properties/VC++ Directories/"
+and add to
+"/General/Include Directories" the path to "dim_xxxx\dim"
+e.g. "C:\dim_v20r7\dim"
+and add to
+"/General/Library Directories" the path to "dim_xxxx\bin32".
+
+Go to 
+"/Configuration Properties/Linker/Input"
+edit
+"Additional Dependencies"
+and type there "dim.lib".
+
+/DIM_server_GC_final/Source.cpp should now compile successfully
