@@ -43,7 +43,7 @@ int GetStreamNumber(string LatestFolderName)
 			string tempLatestFolderName = LatestFolderName+"\\Result.xml";
 			wstring widestr = wstring(tempLatestFolderName.begin(), tempLatestFolderName.end());
 			const wchar_t * widecstr = widestr.c_str();
-				cout<< "tempLatestFolderName = " << tempLatestFolderName <<endl;
+			cout<< "tempLatestFolderName = " << tempLatestFolderName <<endl;
 			if (xmlDoc->load(widecstr) != VARIANT_TRUE)
 			{
 				printf("Unable to load Result.xml in function GetStreamNumber()\n");
@@ -177,7 +177,7 @@ COMPLEXDATA GetPeakData(string LatestFolderName, _bstr_t ElementName)
 			}
 			else
 			{
-				printf("XML was successfully loaded\n");
+				//printf("XML was successfully loaded\n");
 
 				xmlDoc->setProperty("SelectionLanguage", "XPath");
 
@@ -274,9 +274,6 @@ int _tmain(int argc, TCHAR *argv[])
 	float RTCO2_max = 3.4f;
 	float RTArgon_min = 5.9f;
 	float RTArgon_max = 6.3f;
-	// various stuff like Elementnames that will be called or temp variables:
-	_bstr_t RT = "RetTime";
-	_bstr_t PeakArea = "AreaPercent";
 	// create DIM-Services
 	COMPLEXDATA PeakAreaData;
 	COMPLEXDATA RTData;
@@ -285,7 +282,7 @@ int _tmain(int argc, TCHAR *argv[])
 	DimService tpcArgonContent("ALICE_GC.Actual.tpcArgonContent",Argon_TPC); 
 	DimService tpcN2Content("ALICE_GC.Actual.tpcN2Content",N2_TPC); 
 	DimService tpcWaterContent("ALICE_GC.Actual.tpcWaterContent",Water_TPC);
-	DimServer::setDnsNode("localhost"); //tpc dim dns node: 'alitpcdimdns'
+	DimServer::setDnsNode("alitpcdimdns"); //tpc dim dns node: 'alitpcdimdns'
 	DimServer::start("ALICE_GC");
 
 	string InjectionTimeAndDate_store1;
@@ -300,62 +297,67 @@ int _tmain(int argc, TCHAR *argv[])
 	LogFile << "\n \n \n ### DIM SERVER STARTED in "<< targetDirectory << " ### \n \n";
 
 	bool acquiringNow;
-	bool FoundXmlFile = FALSE;
+	bool FoundXmlFile;
 	string PathToACQUIRINGTXT =targetDirectory+"\\ACQUIRING.TXT";
 	string lines[4];
 
 	while(1)
 	{
 		LogFile<< "\n \n ### Begin of Loop ###" <<endl;
+
+		// try to open file "ACQUIRING.TXT" that is produced by Agilent ChemStation during measurement and contains the folderpath for the next measurement.
+		acquiringNow = FALSE;
 		do
 		{
-			// try to open file "ACQUIRING.TXT" that is produced by Agilent ChemStation during measurement and contains the folderpath for the next measurement.
 			ifstream CheckIfAcquiring(PathToACQUIRINGTXT);	
 			acquiringNow = CheckIfAcquiring.good();
 			CheckIfAcquiring.close();
-			Sleep(1000);
+			Sleep(5000);
 		}
 		while (!acquiringNow);
 
+
 		//now get folderpath of current measurement from that file.
 		ifstream thatfile(PathToACQUIRINGTXT);
-		for (int i=0;i<4;i++) thatfile >> lines[i];
-		LatestFolderName = targetDirectory+"\\"+CutTheCrap(lines[2]);
+		for (int i=0;i<4;i++) thatfile >> lines[i]; //read content of that file line by line.
+		LatestFolderName = targetDirectory+"\\"+CutTheCrap(lines[2]); // CutTheCrap() will rwturn the Foldername in the corresponding line of that file.
 		thatfile.close();
-		LogFile << "New Folder: " <<LatestFolderName <<endl;
+		LogFile << "New Folder: "<<LatestFolderName <<endl;
 
-		while(!FoundXmlFile)
-		{	
-			// try to open file "ACQUIRING.TXT" that is produced by Agilent ChemStation during measurement and contains the folderpath for the next measurement.
+		// try to open Result.xml that is created at the end of the measurement.
+		FoundXmlFile=FALSE;
+		do
+		{
 			ifstream checkXML(LatestFolderName+"/Result.xml");	
-			if(checkXML.good())
-			{
-				checkXML.close();
-				do
-				{
-					Sleep(1000);
-					StreamNumber = GetStreamNumber(LatestFolderName);
-					LogFile << "CheckXML Loop. StreamNumber = " << StreamNumber <<endl;
-				}
-				while (	StreamNumber == -1 );
-				FoundXmlFile = TRUE;
-				LogFile << "Some Result.XML was read and GetStreamNumber() returned : " << StreamNumber<<endl;
-			}
-			Sleep(1000);
+			FoundXmlFile = checkXML.good();
+			checkXML.close();
+			Sleep(5000);
 		}
-		FoundXmlFile = FALSE;
+		while(!FoundXmlFile);
+
+		//Probe with GetStreamNumber() if there is already vaild information in the file.
+		do
+		{
+			Sleep(3000);
+			StreamNumber = GetStreamNumber(LatestFolderName);
+			LogFile << "CheckXML Loop. StreamNumber = " << StreamNumber <<endl;
+		}
+		while (	StreamNumber == -1 ); // GetStreamNumber returns -1 when there is no file that can be opened.
+
+		LogFile << "Some Result.XML was read and GetStreamNumber() returned : " << StreamNumber<<endl;
+		Sleep(1000);
 		InjectionTimeAndDate_store1 = GetIjnectionTime(LatestFolderName);
 		LogFile << "Injection Time = " << InjectionTimeAndDate_store1 <<endl;
 		NumberOfPeaks = GetNumberOfPeaks(LatestFolderName);
-		PeakAreaData = GetPeakData(LatestFolderName, PeakArea);
-		RTData = GetPeakData(LatestFolderName, RT);
+		PeakAreaData = GetPeakData(LatestFolderName,"AreaPercent");
+		RTData = GetPeakData(LatestFolderName,"RetTime");
 		for (int i=0;i<NumberOfPeaks;i++)
 		{
 			if ( StreamNumber == 1 ) // StreamNumber 1 is TPC GAS ==> update DIM Services for TPC
 			{
 				// decide based on Retention Time which peak is which and update DIM services accordingly:
-				if ( RTCO2_min<RTData.farr[i] && RTData.farr[i]<RTCO2_max ) CO2_TPC = PeakAreaData.farr[i], cout << "CO2 candidate: " << CO2_TPC <<endl , tpcCO2Content.updateService();
-				if ( RTArgon_min<RTData.farr[i] && RTData.farr[i]<RTArgon_max ) Argon_TPC = PeakAreaData.farr[i], cout << "Argon candidate: " << Argon_TPC <<endl , tpcArgonContent.updateService();
+				if ( RTCO2_min<RTData.farr[i] && RTData.farr[i]<RTCO2_max ) CO2_TPC = PeakAreaData.farr[i], LogFile<< "CO2 candidate: " << CO2_TPC <<endl , tpcCO2Content.updateService();
+				if ( RTArgon_min<RTData.farr[i] && RTData.farr[i]<RTArgon_max ) Argon_TPC = PeakAreaData.farr[i], LogFile<< "Argon candidate: " << Argon_TPC <<endl , tpcArgonContent.updateService();
 			}
 			if (PeakAreaData.farr[0] >= 0 ) Stream1.updateService(); //only update Stream1 when it contains real data (that is no dummy data "-1").
 		}
