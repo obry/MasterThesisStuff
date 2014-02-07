@@ -17,7 +17,7 @@
 using namespace std;
 
 typedef struct{
-	float farr[12]; // this is more than needed, but right Number of Peaks is returned by GetNumberOfPeaks()
+	float farr[21]; // this is more than needed, but right Number of Peaks is returned by GetNumberOfPeaks()
 	// Open question: How to deal with this in PVSS? There must be better ideas.
 	// ==> TPC prefers single service for each datapointelement anyway.
 }COMPLEXDATA;
@@ -43,7 +43,6 @@ int GetStreamNumber(string LatestFolderName)
 			string tempLatestFolderName = LatestFolderName+"\\Result.xml";
 			wstring widestr = wstring(tempLatestFolderName.begin(), tempLatestFolderName.end());
 			const wchar_t * widecstr = widestr.c_str();
-			cout<< "tempLatestFolderName = " << tempLatestFolderName <<endl;
 			if (xmlDoc->load(widecstr) != VARIANT_TRUE)
 			{
 				printf("Unable to load Result.xml in function GetStreamNumber()\n");
@@ -151,10 +150,7 @@ COMPLEXDATA GetPeakData(string LatestFolderName, _bstr_t ElementName)
 	//return Info with label 'ElementName' in "Result.xml" for all Peaks
 {
 	COMPLEXDATA Peaks;
-	for (int i=0;i<12;i++)
-	{
-		Peaks.farr[i]=-1; //fill with dummy data to be able to return something in any case.
-	}
+	Peaks.farr[0]=-1; //fill with dummy data to be able to return something in any case.
 	HRESULT hr = CoInitialize(NULL); 
 	if (SUCCEEDED(hr))
 	{
@@ -193,10 +189,6 @@ COMPLEXDATA GetPeakData(string LatestFolderName, _bstr_t ElementName)
 					MSXML::IXMLDOMTextPtr spText = spElementTemp->firstChild;
 					AreaPercentValue[i]=(float)wcstod(_bstr_t(spText->nodeValue),NULL); //using directly _variant_t Extractor 'operator float()' will produce strange numbers. wcstof() is undefined according to compiler.
 					Peaks.farr[i] = AreaPercentValue[i];
-					//if (spText != NULL) 
-					//{
-					//cout << " Element TESTEST content: " << wcstod(_bstr_t(spText->nodeValue),NULL) << endl;
-					//}
 				}
 				return Peaks;
 			}
@@ -228,6 +220,7 @@ string CutTheCrap(string line)
 
 int _tmain(int argc, TCHAR *argv[])
 {
+	float MethodRuntime=86000; //runtime of GC method in ms.
 	LARGE_INTEGER filesize;
 	TCHAR szDir[MAX_PATH];
 	size_t length_of_arg;
@@ -271,18 +264,19 @@ int _tmain(int argc, TCHAR *argv[])
 	float Water_TPC=0;
 	// create Retention Time values:
 	float RTCO2_min = 2.9f; //the "f" is to explicitly tell the compiler this is a float. I get "truncation from 'double' to 'float'" warning otherwise !?
-	float RTCO2_max = 3.4f;
-	float RTArgon_min = 5.9f;
-	float RTArgon_max = 6.3f;
+	float RTCO2_max = 3.3f;
+	float RTArgon_min = 5.8f;
+	float RTArgon_max = 6.25f;
 	// create DIM-Services
+	COMPLEXDATA PeakAreaPercentData;
 	COMPLEXDATA PeakAreaData;
 	COMPLEXDATA RTData;
-	DimService Stream1("Stream1_PeakAreas","F:7",(void *)&PeakAreaData, sizeof(PeakAreaData));
+	DimService Stream1("Stream1_PeakAreas","F:7",(void *)&PeakAreaPercentData, sizeof(PeakAreaPercentData));
 	DimService tpcCO2Content("ALICE_GC.Actual.tpcCO2Content",CO2_TPC); 
 	DimService tpcArgonContent("ALICE_GC.Actual.tpcArgonContent",Argon_TPC); 
 	DimService tpcN2Content("ALICE_GC.Actual.tpcN2Content",N2_TPC); 
 	DimService tpcWaterContent("ALICE_GC.Actual.tpcWaterContent",Water_TPC);
-	DimServer::setDnsNode("alitpcdimdns"); //tpc dim dns node: 'alitpcdimdns'
+	DimServer::setDnsNode("localhost"); //tpc dim dns node: 'alitpcdimdns'
 	DimServer::start("ALICE_GC");
 
 	string InjectionTimeAndDate_store1;
@@ -298,11 +292,16 @@ int _tmain(int argc, TCHAR *argv[])
 
 	bool acquiringNow;
 	bool FoundXmlFile;
+	bool forceExit;
+	int roundNumber;
+	float roundDuration = 5000;
 	string PathToACQUIRINGTXT =targetDirectory+"\\ACQUIRING.TXT";
 	string lines[4];
 
+
 	while(1)
 	{
+		// continuously look for new measurement-files. Update Dim Services with content of said files. Do this eternally.
 		LogFile<< "\n \n ### Begin of Loop ###" <<endl;
 
 		// try to open file "ACQUIRING.TXT" that is produced by Agilent ChemStation during measurement and contains the folderpath for the next measurement.
@@ -314,7 +313,7 @@ int _tmain(int argc, TCHAR *argv[])
 			CheckIfAcquiring.close();
 			Sleep(5000);
 		}
-		while (!acquiringNow);
+		while (!acquiringNow); //this loop does not need a further exit. If in doubt or if something bad happened: Continuously look if a new measurement is taking place.
 
 
 		//now get folderpath of current measurement from that file.
@@ -326,40 +325,51 @@ int _tmain(int argc, TCHAR *argv[])
 
 		// try to open Result.xml that is created at the end of the measurement.
 		FoundXmlFile=FALSE;
+		forceExit=FALSE;
+		roundNumber = 0;
 		do
 		{
 			ifstream checkXML(LatestFolderName+"/Result.xml");	
 			FoundXmlFile = checkXML.good();
 			checkXML.close();
-			Sleep(5000);
+			Sleep(roundDuration);
+			// this loop needs a second exit, if the XML file in this very folder is not created for any reason.
+			// A GC measurement is atm 8.6 minutes long.
+			roundNumber++;
+			if(roundNumber>(MethodRuntime+5000)/roundDuration) forceExit=TRUE;
 		}
-		while(!FoundXmlFile);
-
+		while(!FoundXmlFile || forceExit);
+		LogFile << "roundNumber for checking if Result.xml exists: " << roundNumber <<endl;
 		//Probe with GetStreamNumber() if there is already vaild information in the file.
+		roundNumber=0;
 		do
 		{
 			Sleep(3000);
 			StreamNumber = GetStreamNumber(LatestFolderName);
-			LogFile << "CheckXML Loop. StreamNumber = " << StreamNumber <<endl;
+			// this loop needs a second exit, too. See above.s
+			roundNumber++;
+			if(roundNumber>(MethodRuntime+6000)/3000) forceExit=TRUE;
 		}
-		while (	StreamNumber == -1 ); // GetStreamNumber returns -1 when there is no file that can be opened.
+		while (	StreamNumber == -1 || forceExit ); // GetStreamNumber returns -1 when there is no file that can be opened. If forceExit=True, there already was a very long wait, so do this only once!
 
 		LogFile << "Some Result.XML was read and GetStreamNumber() returned : " << StreamNumber<<endl;
 		Sleep(1000);
 		InjectionTimeAndDate_store1 = GetIjnectionTime(LatestFolderName);
 		LogFile << "Injection Time = " << InjectionTimeAndDate_store1 <<endl;
 		NumberOfPeaks = GetNumberOfPeaks(LatestFolderName);
-		PeakAreaData = GetPeakData(LatestFolderName,"AreaPercent");
+		PeakAreaPercentData = GetPeakData(LatestFolderName,"AreaPercent");
+		PeakAreaData = GetPeakData(LatestFolderName,"Area");
 		RTData = GetPeakData(LatestFolderName,"RetTime");
+		cout << "Results.xml with Streamnumber 1 found in " << LatestFolderName <<endl;
 		for (int i=0;i<NumberOfPeaks;i++)
 		{
 			if ( StreamNumber == 1 ) // StreamNumber 1 is TPC GAS ==> update DIM Services for TPC
 			{
 				// decide based on Retention Time which peak is which and update DIM services accordingly:
-				if ( RTCO2_min<RTData.farr[i] && RTData.farr[i]<RTCO2_max ) CO2_TPC = PeakAreaData.farr[i], LogFile<< "CO2 candidate: " << CO2_TPC <<endl , tpcCO2Content.updateService();
-				if ( RTArgon_min<RTData.farr[i] && RTData.farr[i]<RTArgon_max ) Argon_TPC = PeakAreaData.farr[i], LogFile<< "Argon candidate: " << Argon_TPC <<endl , tpcArgonContent.updateService();
+				if ( RTCO2_min<RTData.farr[i] && RTData.farr[i]<RTCO2_max ) CO2_TPC = PeakAreaPercentData.farr[i], LogFile<< "CO2 candidate: " << CO2_TPC <<endl , tpcCO2Content.updateService();
+				if ( RTArgon_min<RTData.farr[i] && RTData.farr[i]<RTArgon_max ) Argon_TPC = PeakAreaPercentData.farr[i], LogFile<< "Argon candidate: " << Argon_TPC <<endl , tpcArgonContent.updateService();
 			}
-			if (PeakAreaData.farr[0] >= 0 ) Stream1.updateService(); //only update Stream1 when it contains real data (that is no dummy data "-1").
+			if (PeakAreaPercentData.farr[0] >= 0 ) Stream1.updateService(); //only update Stream1 when it contains real data (that is no dummy data "-1").
 		}
 		LogFile << "end of cycle" <<endl;
 		Sleep(5000); //ein bisschen Schlaf muss sein.
